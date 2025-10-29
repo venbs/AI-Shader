@@ -32,7 +32,7 @@ void main() {
 
   float mask = pow(length(st),10.0);
 
-  
 
-  gl_FragColor = vec4(color,1.0);
+
+  gl_FragColor = vec4(texColor,1.0);
 }
