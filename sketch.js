@@ -3,10 +3,10 @@
 let pane;
 let gfx;
 let params = {
-    colorA: { r: 255, g: 204, b: 251 },
-    colorB: { r: 156, g: 171, b: 255 },
-    colorC: { r: 255, g: 205, b: 177 },
-    colorD: { r: 175, g: 134, b: 255 },
+    colorA: { r: 61, g: 141, b: 255 },
+    colorB: { r: 171, g: 185, b: 255 },
+    colorC: { r: 229, g: 209, b: 255 },
+    colorD: { r: 255, g: 255, b: 255 },
     fps: 0,
     noiseScale: 8.0,
     noiseDetail: 3.0,
@@ -61,7 +61,7 @@ function draw() {
     let noiseLevel = 255;
     noiseDetail(params.noiseDetail, params.noiseFalloff);
     let noiseScale = params.noiseScale;
-    let step = 10; // 步长：设置为1获得平滑效果
+    let step = 5; // 步长：设置为1获得平滑效果
     let colors = [
         [params.colorA.r, params.colorA.g, params.colorA.b],        // 颜色1 [R, G, B]
         [params.colorB.r, params.colorB.g, params.colorB.b],    // 颜色2
@@ -124,7 +124,7 @@ function draw() {
     myShader.setUniform('u_tex', gfx);
     myShader.setUniform('u_resolution', [width, height]);
     myShader.setUniform('u_time', (millis() - clickTime) / 1000.0);
-    myShader.setUniform('u_waveSpeed', params.waveSpeed);
+    myShader.setUniform('u_waveSpeed', params.waveSpeed); // 波浪速度
     myShader.setUniform('u_warpStrength', params.warpStrength);
 
     plane(width, height);

@@ -31,6 +31,8 @@ void main() {
   vec3 color = vec3(1.0) - (vec3(1.0) - circleColor) * (vec3(1.0) - texColor);
 
   float mask = pow(length(st),10.0);
-  color += mask;
+
+  
+
   gl_FragColor = vec4(color,1.0);
 }
