@@ -3,8 +3,8 @@
 let pane;
 let gfx;
 let params = {
-    colorA: { r: 61, g: 141, b: 255 },
-    colorB: { r: 171, g: 185, b: 255 },
+    colorA: { r: 0, g: 0, b: 0 },
+    colorB: { r: 61, g: 141, b: 255 },
     colorC: { r: 229, g: 209, b: 255 },
     colorD: { r: 255, g: 255, b: 255 },
     fps: 0,
