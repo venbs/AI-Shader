@@ -3,18 +3,19 @@
 let pane;
 let gfx;
 let params = {
-    colorA: { r: 0, g: 0, b: 0 },
+    colorA: { r: 179, g: 215, b: 255 },
     colorB: { r: 61, g: 141, b: 255 },
     colorC: { r: 229, g: 209, b: 255 },
     colorD: { r: 255, g: 255, b: 255 },
     fps: 0,
-    noiseScale: 8.0,
+    noiseScale: 10.0,
     noiseDetail: 3.0,
     noiseFalloff: 0.5,
     noiseContrast: 3.0,
     noiseSpeed: 5,
     waveSpeed: 1,
     warpStrength: 0.3,
+    chromaticAberration: 0.03,
 };
 let myShader;
 let clickTime = 0;
@@ -48,7 +49,8 @@ function setup() {
         { key: 'colorC', options: { type: 'color' } },
         { key: 'colorD', options: { type: 'color' } },
         { key: 'waveSpeed', options: { min: 0.5, max: 5 } },
-        { key: 'warpStrength', options: { min: 0.1, max: 1 } }
+        { key: 'warpStrength', options: { min: 0.1, max: 1 } },
+        { key: 'chromaticAberration', options: { min: 0.001, max: 0.04 } }
     ];
 
     bindings.forEach(({ key, options }) => pane.addBinding(params, key, options));
@@ -126,6 +128,7 @@ function draw() {
     myShader.setUniform('u_time', (millis() - clickTime) / 1000.0);
     myShader.setUniform('u_waveSpeed', params.waveSpeed); // 波浪速度
     myShader.setUniform('u_warpStrength', params.warpStrength);
+    myShader.setUniform('u_chromaticAberration', params.chromaticAberration);
 
     plane(width, height);
     params.fps = floor(frameRate());
