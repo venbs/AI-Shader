@@ -1,11 +1,13 @@
 // 片段着色器 - 处理每个像素的颜色和效果
 precision highp float;
 
+// #define MAX_RIPPLES 20 (Simulated by hardcoding to ensure compatibility)
+
 varying vec2 vTexCoord;
 
 uniform vec2 u_resolution;
-uniform vec2 u_mouseCoord;
-uniform float u_time;           // 用于涟漪效果的时间
+// uniform vec2 u_mouseCoord; // Replaced by array
+// uniform float u_time;      // Replaced by array
 uniform float u_absoluteTime;   // 用于噪波的时间
 uniform float u_frameCount;     // 帧数，用于跟p5逻辑对齐
 uniform sampler2D u_tex;        // (不再使用，但保留定义以免报错)
@@ -13,6 +15,13 @@ uniform sampler2D u_tex;        // (不再使用，但保留定义以免报错)
 uniform float u_waveSpeed;
 uniform float u_warpStrength;
 uniform float u_chromaticAberration;
+
+// 多重涟漪 uniforms
+// 使用 float 替代 int 以提高兼容性
+uniform float u_rippleCount;
+// 硬编码数组长度为 20，避免宏定义问题
+uniform vec2 u_ripplePos[20];
+uniform float u_rippleTime[20];
 
 // 颜色参数
 uniform vec3 u_colorA;
@@ -149,7 +158,9 @@ vec3 getNoiseColor(vec2 coord) {
     }
     
     // 归一化结果到 0~1
-    n /= maxAmp;
+    if (maxAmp > 0.0) {
+        n /= maxAmp;
+    }
 
     // 3. 对比度调整
     // c = constrain((c - 128) * contrast + 128, 0, 255);
@@ -190,31 +201,52 @@ float getRingShape(float dist, float radius, float thickness) {
 void main() {
     // 1. 坐标归一化处理
     vec2 st = vTexCoord * 2.0 - 1.0;
-    vec2 mousePos = u_mouseCoord / u_resolution * 2.0 - 1.0;
-    
-    // 修正宽高比
     float aspect = u_resolution.x / u_resolution.y;
     st.x *= aspect;
-    mousePos.x *= aspect;
     
-    // 2. 基础参数计算
-    float baseRadius = u_time * u_waveSpeed;
-    float mouseDist = length(st - mousePos);
-    float feadOut = max(1.0 - u_time * 0.3, 0.0);
+    // 初始化累计变量
+    vec3 totalCircleColor = vec3(0.0);
+    vec2 totalWarpOffset = vec2(0.0);
     float thickness = 0.25;
     float colorOffset = u_chromaticAberration; 
 
-    // --- 色差圆环计算 ---
-    float rRing = getRingShape(mouseDist, baseRadius + colorOffset, thickness);
-    float gRing = getRingShape(mouseDist, baseRadius, thickness);
-    float bRing = getRingShape(mouseDist, baseRadius - colorOffset, thickness);
-
-    // 组合成带有色差的圆环颜色
-    vec3 circleColor = vec3(rRing, gRing, bRing) * feadOut;
+    // --- 循环处理每个涟漪 ---
+    for(int i = 0; i < 20; i++) {
+        if(float(i) >= u_rippleCount) break;
+        
+        vec2 ripplePosRaw = u_ripplePos[i];
+        float rippleTime = u_rippleTime[i];
+        
+        // 确保坐标在屏幕内才处理(简单的优化)
+        if(ripplePosRaw.x < -100.0) continue; 
+        
+        vec2 mousePos = ripplePosRaw / u_resolution * 2.0 - 1.0;
+        mousePos.x *= aspect;
+        
+        float baseRadius = rippleTime * u_waveSpeed;
+        float mouseDist = length(st - mousePos);
+        float feadOut = max(1.0 - rippleTime * 0.3, 0.0);
+        
+        // --- 色差圆环计算 ---
+        float rRing = getRingShape(mouseDist, baseRadius + colorOffset, thickness);
+        float gRing = getRingShape(mouseDist, baseRadius, thickness);
+        float bRing = getRingShape(mouseDist, baseRadius - colorOffset, thickness);
+        
+        vec3 currentCircle = vec3(rRing, gRing, bRing) * feadOut;
+        
+        // 累加颜色 (Use Screen Blend for better overlay)
+        // Screen: 1 - (1-a)(1-b)
+        totalCircleColor = vec3(1.0) - (vec3(1.0) - totalCircleColor) * (vec3(1.0) - currentCircle);
+        
+        // --- 累加扭曲 ---
+        totalWarpOffset += vec2(gRing * feadOut * u_warpStrength);
+    }
+    
 
     // 3. 背景扭曲处理
     vec2 warpedCoord = vTexCoord;
-    warpedCoord -= vec2(gRing * feadOut * u_warpStrength); 
+    // 注意：原来的逻辑是 -vec2(gRing...)，所以这里也要减
+    warpedCoord -= totalWarpOffset;
     
     // --- 核心修改：计算边缘模糊强度 ---
     float distToCenter = length(vTexCoord - vec2(0.5));
@@ -229,7 +261,6 @@ void main() {
         texColor = getNoiseColor(warpedCoord);
     } else {
         float totalSamples = 0.0;
-        // 降低循环次数以进一步优化性能，或者保持不变
         for(float x = -2.0; x <= 2.0; x += 1.0) {
             for(float y = -2.0; y <= 2.0; y += 1.0) {
                 vec2 offset = vec2(x, y) * 0.005 * (edgeStrength * 4.0); 
@@ -240,8 +271,8 @@ void main() {
         texColor /= totalSamples;
     }
 
-    // 4. 混合模式 (Screen 滤色混合)
-    vec3 color = vec3(1.0) - (vec3(1.0) - circleColor * 0.85) * (vec3(1.0) - texColor);
+    // 4. 混合模式 (Screen 滤色混合 叠加圆环色)
+    vec3 color = vec3(1.0) - (vec3(1.0) - totalCircleColor * 0.85) * (vec3(1.0) - texColor);
 
     // 增加四周的白色遮罩 (复用 edgeStrength)
     vec3 finalColor = mix(color, vec3(1.0), edgeStrength);
