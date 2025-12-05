@@ -59,74 +59,35 @@ function setup() {
 
 function draw() {
 
-    // 设置噪波参数
-    let noiseLevel = 255;
-    noiseDetail(params.noiseDetail, params.noiseFalloff);
-    let noiseScale = params.noiseScale;
-    let step = 5; // 步长：设置为1获得平滑效果
-    let colors = [
-        [params.colorA.r, params.colorA.g, params.colorA.b],        // 颜色1 [R, G, B]
-        [params.colorB.r, params.colorB.g, params.colorB.b],    // 颜色2
-        [params.colorC.r, params.colorC.g, params.colorC.b],    // 颜色3
-        [params.colorD.r, params.colorD.g, params.colorD.b]    // 颜色4
-    ];
+    // 准备颜色数据 (归一化到 0-1)
+    let colorA = [params.colorA.r / 255, params.colorA.g / 255, params.colorA.b / 255];
+    let colorB = [params.colorB.r / 255, params.colorB.g / 255, params.colorB.b / 255];
+    let colorC = [params.colorC.r / 255, params.colorC.g / 255, params.colorC.b / 255];
+    let colorD = [params.colorD.r / 255, params.colorD.g / 255, params.colorD.b / 255];
 
-    // 使用 loadPixels 提升性能
-
-    gfx.loadPixels();
-
-    // 遍历像素（使用步长优化）
-    for (let y = 0; y < gfx.height; y += step) {
-        for (let x = 0; x < gfx.width; x += step) {
-            // 缩放输入坐标
-            let nx = noiseScale * x / 10000;
-            let ny = noiseScale * y / 10000;
-            let nt = noiseScale * frameCount * params.noiseSpeed / 10000;
-            // 计算噪波值
-            let c = noiseLevel * noise(nx, ny, nt);
-            let contrast = params.noiseContrast;
-            c = constrain((c - 128) * contrast + 128, 0, 255);
-
-            let segment = floor(c / 85);
-            if (segment === 3 && c === 255) {
-                t = 1;
-            } else {
-                t = (c % 85) / 85;
-            }
-            segment = constrain(segment, 0, 2);
-
-            let r = lerp(colors[segment][0], colors[segment + 1][0], t);
-            let g = lerp(colors[segment][1], colors[segment + 1][1], t);
-            let b = lerp(colors[segment][2], colors[segment + 1][2], t);
-
-            let index = (x + y * gfx.width) * 4;
-            gfx.pixels[index] = r;     // R
-            gfx.pixels[index + 1] = g; // G
-            gfx.pixels[index + 2] = b; // B
-            gfx.pixels[index + 3] = 255; // A
-
-            // 如果步长大于1，填充相邻像素
-            if (step > 1) {
-                for (let dy = 0; dy < step && y + dy < gfx.height; dy++) {
-                    for (let dx = 0; dx < step && x + dx < gfx.width; dx++) {
-                        let idx = ((x + dx) + (y + dy) * gfx.width) * 4;
-                        gfx.pixels[idx] = r;
-                        gfx.pixels[idx + 1] = g;
-                        gfx.pixels[idx + 2] = b;
-                        gfx.pixels[idx + 3] = 255;
-                    }
-                }
-            }
-        }
-    }
-    gfx.updatePixels();
     background(255);
 
     shader(myShader);
-    myShader.setUniform('u_tex', gfx);
+
+    // 传递颜色 uniform
+    myShader.setUniform('u_colorA', colorA);
+    myShader.setUniform('u_colorB', colorB);
+    myShader.setUniform('u_colorC', colorC);
+    myShader.setUniform('u_colorD', colorD);
+
+    // 传递噪波参数 uniform
+    myShader.setUniform('u_noiseScale', params.noiseScale);
+    myShader.setUniform('u_noiseDetail', params.noiseDetail);
+    myShader.setUniform('u_noiseFalloff', params.noiseFalloff);
+    myShader.setUniform('u_noiseContrast', params.noiseContrast);
+    myShader.setUniform('u_noiseSpeed', params.noiseSpeed);
+
+    // 其他 uniforms
     myShader.setUniform('u_resolution', [width, height]);
     myShader.setUniform('u_time', (millis() - clickTime) / 1000.0);
-    myShader.setUniform('u_waveSpeed', params.waveSpeed); // 波浪速度
+    myShader.setUniform('u_absoluteTime', millis() / 1000.0); // 用于噪波的时间
+    myShader.setUniform('u_frameCount', frameCount);          // 也可以用 frameCount 保持跟原来逻辑一致
+    myShader.setUniform('u_waveSpeed', params.waveSpeed);
     myShader.setUniform('u_warpStrength', params.warpStrength);
     myShader.setUniform('u_chromaticAberration', params.chromaticAberration);
 
@@ -152,7 +113,7 @@ function mousePressed() {
     clickTime = millis();
     // Y坐标需要翻转：p5.js坐标系原点在左上，WebGL坐标系原点在左下
     myShader.setUniform('u_mouseCoord', [mouseX, height - mouseY]);
-  }
-  
+}
+
 
 
