@@ -198,9 +198,10 @@ float getRingShape(float dist, float radius, float thickness) {
     return outer - inner;
 }
 
-void main() {
-    // 1. 坐标归一化处理
-    vec2 st = vTexCoord * 2.0 - 1.0;
+// --- 核心渲染逻辑：计算场景颜色 (Before Blur) ---
+vec3 getSceneColor(vec2 uv) {
+    // 1. 坐标归一化处理 (uv is 0-1)
+    vec2 st = uv * 2.0 - 1.0;
     float aspect = u_resolution.x / u_resolution.y;
     st.x *= aspect;
     
@@ -234,48 +235,53 @@ void main() {
         
         vec3 currentCircle = vec3(rRing, gRing, bRing) * feadOut;
         
-        // 累加颜色 (Use Screen Blend for better overlay)
-        // Screen: 1 - (1-a)(1-b)
+        // 累加颜色 (Screen Blend)
         totalCircleColor = vec3(1.0) - (vec3(1.0) - totalCircleColor) * (vec3(1.0) - currentCircle);
         
         // --- 累加扭曲 ---
         totalWarpOffset += vec2(gRing * feadOut * u_warpStrength);
     }
-    
 
-    // 3. 背景扭曲处理
-    vec2 warpedCoord = vTexCoord;
-    // 注意：原来的逻辑是 -vec2(gRing...)，所以这里也要减
+    // 2. 背景扭曲处理
+    vec2 warpedCoord = uv;
     warpedCoord -= totalWarpOffset;
     
-    // --- 核心修改：计算边缘模糊强度 ---
+    // 3. 获取噪波颜色
+    vec3 texColor = getNoiseColor(warpedCoord);
+
+    // 4. 混合模式 (Screen 滤色混合 叠加圆环色)
+    vec3 color = vec3(1.0) - (vec3(1.0) - totalCircleColor * 0.85) * (vec3(1.0) - texColor);
+    
+    return color;
+}
+
+void main() {
+    // --- 计算边缘模糊强度 ---
     float distToCenter = length(vTexCoord - vec2(0.5));
     float edgeStrength = smoothstep(0.1, 0.8, distToCenter);
     float maxBlurRadius = 0.05; 
     float currentBlur = edgeStrength * maxBlurRadius;
 
-    vec3 texColor = vec3(0.0);
+    vec3 finalColor = vec3(0.0);
     
-    // --- 模糊采样循环 (现在调用 getNoiseColor 而不是 texture2D) ---
+    // --- 模糊采样循环 (采样 getSceneColor) ---
     if(currentBlur < 0.001) {
-        texColor = getNoiseColor(warpedCoord);
+        finalColor = getSceneColor(vTexCoord);
     } else {
         float totalSamples = 0.0;
+        // 使用 5x5 的网格采样
         for(float x = -2.0; x <= 2.0; x += 1.0) {
             for(float y = -2.0; y <= 2.0; y += 1.0) {
                 vec2 offset = vec2(x, y) * 0.005 * (edgeStrength * 4.0); 
-                texColor += getNoiseColor(warpedCoord + offset);
+                finalColor += getSceneColor(vTexCoord + offset);
                 totalSamples += 1.0;
             }
         }
-        texColor /= totalSamples;
+        finalColor /= totalSamples;
     }
 
-    // 4. 混合模式 (Screen 滤色混合 叠加圆环色)
-    vec3 color = vec3(1.0) - (vec3(1.0) - totalCircleColor * 0.85) * (vec3(1.0) - texColor);
-
     // 增加四周的白色遮罩 (复用 edgeStrength)
-    vec3 finalColor = mix(color, vec3(1.0), edgeStrength);
+    finalColor = mix(finalColor, vec3(1.0), edgeStrength);
 
     gl_FragColor = vec4(finalColor, 1.0);
 }

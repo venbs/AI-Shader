@@ -60,10 +60,12 @@ function setup() {
     // Add Snapshot Button
     pane.addButton({
         title: 'Take Snapshot',
-    }).on('click', () => {
-        save('wave_ripple_' + floor(millis()) + '.jpg');
-    });
+    }).on('click', saveSnapshot);
     // myShader.setUniform('u_mouseCoord', [width / 2, height / 2]); // This initial uniform is no longer needed
+}
+
+function saveSnapshot() {
+    save('wave_ripple_' + floor(millis()) + '.jpg');
 }
 
 function draw() {
@@ -158,4 +160,10 @@ function mousePressed() {
         startTime: millis() / 1000.0
     });
     // myShader.setUniform('u_mouseCoord', [mouseX, height - mouseY]); // This is no longer needed
+}
+
+function keyPressed() {
+    if (key === 's' || key === 'S') {
+        saveSnapshot();
+    }
 }
