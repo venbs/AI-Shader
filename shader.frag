@@ -13,11 +13,14 @@ uniform float u_chromaticAberration;
 
 // --- 辅助函数：计算单色圆环强度 ---
 float getRingShape(float dist, float radius, float thickness) {
-    // 外边缘过渡
     float outer = smoothstep(radius + thickness, radius, dist);
-    // 内边缘过渡
     float inner = smoothstep(radius, radius - thickness, dist);
     return outer - inner;
+}
+
+// --- 辅助函数：随机数 (可选，用于一种更散乱的模糊，这里暂时不用) ---
+float random(vec2 st) {
+    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
 }
 
 void main() {
@@ -34,43 +37,67 @@ void main() {
     float baseRadius = u_time * u_waveSpeed;
     float mouseDist = length(st - mousePos);
     float feadOut = max(1.0 - u_time * 0.3, 0.0);
-    float thickness = 0.2;
-    
-    // 定义色差偏移量 (如果没传 uniform，这里硬编码一个值测试，例如 0.01)
-    // 偏移量建议随波纹扩大而稍微减小，或者保持固定均可
+    float thickness = 0.25;
     float colorOffset = u_chromaticAberration; 
-    // 或者使用 uniform: float colorOffset = u_chromaticAberration;
 
-    // --- 核心修改：分别计算 R、G、B 通道的圆环 ---
-    
-    // R通道：半径稍微大一点 (波纹外侧偏红)
+    // --- 色差圆环计算 ---
     float rRing = getRingShape(mouseDist, baseRadius + colorOffset, thickness);
-    
-    // G通道：保持原始半径
     float gRing = getRingShape(mouseDist, baseRadius, thickness);
-    
-    // B通道：半径稍微小一点 (波纹内侧偏蓝)
     float bRing = getRingShape(mouseDist, baseRadius - colorOffset, thickness);
 
     // 组合成带有色差的圆环颜色
     vec3 circleColor = vec3(rRing, gRing, bRing) * feadOut;
 
-    // 3. 背景扭曲处理 (通常扭曲只用主波纹强度，避免画面太乱)
-    // 这里我们使用 G通道 (中间值) 作为扭曲强度的依据
+    // 3. 背景扭曲处理
     vec2 warpedCoord = vTexCoord;
     warpedCoord -= vec2(gRing * feadOut * u_warpStrength); 
     
-    // 获取背景纹理
-    vec3 texColor = texture2D(u_tex, warpedCoord).rgb;
+    // --- 核心修改：计算边缘模糊强度 ---
+    // 提前计算距离中心的距离
+    float distToCenter = length(vTexCoord - vec2(0.5));
+    
+    // 使用与下方白色蒙层相同的逻辑，计算模糊的权重
+    // 0.1 到 0.6 之间过渡，边缘处值为 1.0，中心为 0.0
+    float edgeStrength = smoothstep(0.1, 0.8, distToCenter);
+    
+    // 定义最大模糊半径 (根据需要调整，0.02 比较适中)
+    float maxBlurRadius = 0.05; 
+    
+    // 当前像素的模糊程度 = 边缘强度 * 最大半径
+    float currentBlur = edgeStrength * maxBlurRadius;
+
+    vec3 texColor = vec3(0.0);
+    
+    // --- 模糊采样循环 ---
+    // 如果位于中心区域(模糊度极小)，直接采样一次以节省性能
+    if(currentBlur < 0.001) {
+        texColor = texture2D(u_tex, warpedCoord).rgb;
+    } else {
+        // 否则进行简单的盒式模糊 (Box Blur)
+        // 循环范围越大，模糊越平滑但性能消耗越高
+        // 这里使用 5x5 的网格采样 (x: -2~2, y: -2~2)
+        float totalSamples = 0.0;
+        for(float x = -2.0; x <= 2.0; x += 1.0) {
+            for(float y = -2.0; y <= 2.0; y += 1.0) {
+                // 计算偏移量：基于当前模糊强度
+                // 0.005 是一个缩放因子，防止步长过大
+                vec2 offset = vec2(x, y) * 0.005 * (edgeStrength * 4.0); 
+                
+                // 累加颜色
+                texColor += texture2D(u_tex, warpedCoord + offset).rgb;
+                totalSamples += 1.0;
+            }
+        }
+        // 取平均值
+        texColor /= totalSamples;
+    }
 
     // 4. 混合模式 (Screen 滤色混合)
-    // 数学公式: Result = 1 - (1 - Base) * (1 - Blend)
-    vec3 color = vec3(1.0) - (vec3(1.0) - circleColor * 0.7) * (vec3(1.0) - texColor);
+    vec3 color = vec3(1.0) - (vec3(1.0) - circleColor * 0.85) * (vec3(1.0) - texColor);
 
-    // 增加四周的遮罩
-    float distToCenter = length(vTexCoord - vec2(0.5));
-    float vignette = smoothstep(0.1, 0.6, distToCenter);
-    vec3 finalColor = mix(color, vec3(1.0), vignette);
+    // 增加四周的白色遮罩 (复用 edgeStrength)
+    // mix(颜色, 白色, 强度)
+    vec3 finalColor = mix(color, vec3(1.0), edgeStrength);
 
     gl_FragColor = vec4(finalColor, 1.0);
 }
